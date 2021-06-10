@@ -21,18 +21,36 @@ namespace Authentication
 {
     public class Startup
     {
-        public Startup(IConfiguration configuration)
+        public Startup(IConfiguration configuration, IWebHostEnvironment webHostEnvironment)
         {
             Configuration = configuration;
+            WebHostEnvironment = webHostEnvironment;
         }
 
         public IConfiguration Configuration { get; }
-
+        public IWebHostEnvironment WebHostEnvironment { get; }
+        
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddDbContext<AuthDbContext>(builder => builder
-                .UseNpgsql(Configuration.GetConnectionString("Postgres")));
+            if (!WebHostEnvironment.IsDevelopment())
+            {
+                var connectionUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+                var databaseUri = new Uri(connectionUrl!);
+
+                var db = databaseUri.LocalPath.TrimStart('/');
+                var userInfo = databaseUri.UserInfo.Split(':', StringSplitOptions.RemoveEmptyEntries);
+
+                var connection =
+                    $"User ID={userInfo[0]};Password={userInfo[1]};Host={databaseUri.Host};Port={databaseUri.Port};Database={db};Pooling=true;SSL Mode=Require;Trust Server Certificate=True;";
+                services.AddDbContext<AuthDbContext>(builder => builder.UseNpgsql(connection));
+            }
+            else
+            {
+                services.AddDbContext<AuthDbContext>(builder => builder
+                    .UseNpgsql(Configuration.GetConnectionString("Postgres")));
+            }
             services.AddIdentityCore<IdentityUser<Guid>>()
                 .AddEntityFrameworkStores<AuthDbContext>()
                 .AddSignInManager();
